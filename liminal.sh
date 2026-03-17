@@ -66,7 +66,7 @@ liminal-activate() {
   liminal-switch $pyver
 
   # activate
-  source "$HOME/.liminal/$1/bin/activate"
+  source "$HOME/.liminal/envs/$1/bin/activate"
   return 0
 }
 
