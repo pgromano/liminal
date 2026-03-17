@@ -12,24 +12,17 @@ _liminal_completions() {
 
     case "$prev" in
         activate|remove)
-            # complete with existing env names
             local envs=$(ls "$HOME/.liminal/envs/" 2>/dev/null)
             COMPREPLY=($(compgen -W "$envs" -- "$cur"))
             ;;
         switch|set|uninstall)
-            # complete with installed python versions
             local versions=$(pyenv versions --bare 2>/dev/null)
             COMPREPLY=($(compgen -W "$versions" -- "$cur"))
             ;;
-        install|search)
-            # no completion — too many options to list
-            COMPREPLY=()
-            ;;
-        create)
+        install|search|create)
             COMPREPLY=()
             ;;
         *)
-            # complete top-level commands
             COMPREPLY=($(compgen -W "$commands" -- "$cur"))
             ;;
     esac
@@ -37,7 +30,7 @@ _liminal_completions() {
 
 complete -F _liminal_completions liminal
 
-liminal-help() {
+_liminal-help() {
   echo "\nUsage:\n liminal <command> [options]"
   echo "\nCommands: "
   echo "  help          Show this help message and exit"
@@ -54,12 +47,11 @@ liminal-help() {
   echo "  status        Display info about the current active env and Python version"
 }
 
-liminal-status() {
+_liminal-status() {
     local pyver=$(python3 --version 2>&1)
     local pypath=$(which python3)
     local env=${VIRTUAL_ENV:-None}
 
-    # colors
     local reset='\033[0m'
     local bold='\033[1m'
     local muted='\033[2m'
@@ -68,12 +60,12 @@ liminal-status() {
     local yellow='\033[38;5;178m'
 
     printf "\n${bold}${teal}󰊠 Liminal Status${reset}\n\n"
-    printf "  ${blue}${bold} Python:      ${reset}${bold}%s${reset} ${muted}%s${reset}\n" "$pyver" "($pypath)"
+    printf "  ${blue}${bold} Python:      ${reset}${bold}%s${reset} ${muted}%s${reset}\n" "$pyver" "($pypath)"
     printf "  ${yellow}${bold}󰌪 Environment: ${reset}${bold}%s${reset}\n" "$env"
     printf "\n"
 }
 
-liminal-list() {
+_liminal-list() {
     printf "\nAvailable Environments\n"
 
     if [ ! -d "$HOME/.liminal/envs" ] || [ -z "$(ls "$HOME/.liminal/envs/" 2>/dev/null)" ]; then
@@ -89,29 +81,25 @@ liminal-list() {
     return 0
 }
 
-liminal-activate() {
+_liminal-activate() {
+    if ! [ -d "$HOME/.liminal/envs/$1" ]; then
+        echo "FAIL: Environment $1 does not exist!"
+        return 1
+    fi
 
-  if ! [ -d "$HOME/.liminal/envs/$1" ]; then
-    echo "FAIL: Environment $1 does not exist!"
-    return 1
-  fi
+    local pyver=$(_liminal-get-python-ver $1)
+    pyenv shell $pyver
 
-  # figure out which python version the env requires and set local env to be current version
-  local pyver=$(_liminal-get-python-ver $1)
-  liminal-switch $pyver
-
-  # activate
-  source "$HOME/.liminal/envs/$1/bin/activate"
-  return 0
+    source "$HOME/.liminal/envs/$1/bin/activate"
+    return 0
 }
 
-liminal-create() {
+_liminal-create() {
     local env_name=$1
     local requirements=""
     local pyver=""
     shift
 
-    # parse optional arguments
     while [ $# -gt 0 ]; do
         case "$1" in
             -r|--requirements)
@@ -129,13 +117,11 @@ liminal-create() {
         esac
     done
 
-    # make sure environment doesn't already exist
     if [ -d "$HOME/.liminal/envs/$env_name" ]; then
         echo "FAIL: Environment $env_name already exists!"
         return 1
     fi
 
-    # set python version — use specified or fall back to global default
     if [ -n "$pyver" ]; then
         if ! pyenv versions --bare | grep -q "^${pyver}$"; then
             echo "FAIL: Python $pyver is not installed. Run: liminal install $pyver"
@@ -146,16 +132,13 @@ liminal-create() {
         pyver=$(pyenv version-name)
     fi
 
-    # create environment and write .python-version
     python3 -m venv "$HOME/.liminal/envs/$env_name"
     echo "$pyver" > "$HOME/.liminal/envs/$env_name/.python-version"
 
-    # activate and install basic dependencies
-    liminal-activate $env_name
+    _liminal-activate $env_name
     python3 -m pip install --upgrade pip ipykernel ipython
     python3 -m ipykernel install --user --name $env_name --display-name "$env_name ($pyver)"
 
-    # install requirements if provided
     if [ -n "$requirements" ]; then
         if [ ! -f "$requirements" ]; then
             echo "FAIL: Requirements file not found: $requirements"
@@ -164,46 +147,39 @@ liminal-create() {
         python3 -m pip install -r "$requirements"
     fi
 
-    # freeze installed libraries to requirements.txt
     python3 -m pip freeze > "$HOME/.liminal/envs/$env_name/requirements.txt"
 
     return 0
 }
 
-liminal-remove() {
+_liminal-remove() {
+    if ! [ -d "$HOME/.liminal/envs/$1" ]; then
+        echo "FAIL: Environment $1 does not exist!"
+        return 1
+    fi
 
-  # make sure environment exists
-  if ! [ -d "$HOME/.liminal/envs/$1" ]; then
-      echo "FAIL: Environment $1 does not exist!"
-      return 1
-  fi
-  
-  # deactivate if currently active
-  if [ "$VIRTUAL_ENV" = "$HOME/.liminal/envs/$1" ]; then
-      deactivate
-  fi
+    if [ "$VIRTUAL_ENV" = "$HOME/.liminal/envs/$1" ]; then
+        deactivate
+    fi
 
-  # remove ipykernel
-  jupyter kernelspec remove -f $1 2>/dev/null
+    jupyter kernelspec remove -f $1 2>/dev/null
+    rm -rf "$HOME/.liminal/envs/$1"
 
-  # remove environment
-  rm -rf "$HOME/.liminal/envs/$1"
-
-  echo "Removed environment $1"
-  return 0
+    echo "Removed environment $1"
+    return 0
 }
 
-liminal-set() {
-  pyenv global $1
-  return 0
+_liminal-set() {
+    pyenv global $1
+    return 0
 }
 
-liminal-switch() {
-  pyenv shell $1
-  return 0
+_liminal-switch() {
+    pyenv shell $1
+    return 0
 }
 
-liminal-install() {
+_liminal-install() {
     if [ -z "$1" ]; then
         echo "FAIL: No Python version specified"
         echo "Usage: liminal install <version>"
@@ -214,7 +190,7 @@ liminal-install() {
     return 0
 }
 
-liminal-uninstall() {
+_liminal-uninstall() {
     if [ -z "$1" ]; then
         echo "FAIL: No Python version specified"
         echo "Usage: liminal uninstall <version>"
@@ -225,7 +201,7 @@ liminal-uninstall() {
     return 0
 }
 
-liminal-search() {
+_liminal-search() {
     if [ -z "$1" ]; then
         printf "\nAvailable Python Versions\n"
         pyenv install --list | grep -E "^\s+[0-9]+\.[0-9]+(\.[0-9]+)?$"
@@ -237,35 +213,35 @@ liminal-search() {
 }
 
 liminal() {
-  if [ -z $1 ];then
-    liminal-help
-  elif [ "$1" = "help" ];then
-    liminal-help
-  elif [ "$1" = "list" ];then
-    liminal-list $2
-  elif [ "$1" = "status" ];then
-    liminal-status
-  elif [ "$1" = "activate" ]; then
-    liminal-activate $2
-  elif [ "$1" = "deactivate" ]; then
-    deactivate
-  elif [ "$1" = "create" ]; then
-    liminal-create $2 "${@:3}"
-  elif [ "$1" = "remove" ]; then
-    liminal-remove $2
-  elif [ "$1" = "install" ]; then
-    liminal-install $2
-  elif [ "$1" = "uninstall" ]; then
-    liminal-uninstall $2
-  elif [ "$1" = "search" ]; then
-    liminal-search $2
-  elif [ "$1" = "set" ]; then
-    liminal-set $2
-  elif [ "$1" = "switch" ]; then
-    liminal-switch $2
-  else
-    echo "FAIL: Unable to interpret liminal method $1"
-    return 1
-  fi
-  return 0
+    if [ -z $1 ]; then
+        _liminal-help
+    elif [ "$1" = "help" ]; then
+        _liminal-help
+    elif [ "$1" = "list" ]; then
+        _liminal-list $2
+    elif [ "$1" = "status" ]; then
+        _liminal-status
+    elif [ "$1" = "activate" ]; then
+        _liminal-activate $2
+    elif [ "$1" = "deactivate" ]; then
+        deactivate
+    elif [ "$1" = "create" ]; then
+        _liminal-create $2 "${@:3}"
+    elif [ "$1" = "remove" ]; then
+        _liminal-remove $2
+    elif [ "$1" = "install" ]; then
+        _liminal-install $2
+    elif [ "$1" = "uninstall" ]; then
+        _liminal-uninstall $2
+    elif [ "$1" = "search" ]; then
+        _liminal-search $2
+    elif [ "$1" = "set" ]; then
+        _liminal-set $2
+    elif [ "$1" = "switch" ]; then
+        _liminal-switch $2
+    else
+        echo "FAIL: Unable to interpret liminal method $1"
+        return 1
+    fi
+    return 0
 }
