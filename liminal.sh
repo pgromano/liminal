@@ -129,13 +129,16 @@ liminal-create() {
         python3 -m pip install -r "$requirements"
     fi
 
+    # freeze installed libraries to requirements.txt
+    python3 -m pip freeze > "$HOME/.liminal/envs/$env_name/requirements.txt"
+
     return 0
 }
 
 liminal-remove() {
 
   # make sure environment exists
-  if ! [ -d "$HOME/.liminal/$1" ]; then
+  if ! [ -d "$HOME/.liminal/envs/$1" ]; then
       echo "FAIL: Environment $1 does not exist!"
       return 1
   fi
