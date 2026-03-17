@@ -2,6 +2,41 @@ _liminal-get-python-ver() {
     echo $(cat "$HOME/.liminal/envs/$1/.python-version" 2>/dev/null || echo "unknown")
 }
 
+# autocomplete
+autoload -U +X bashcompinit && bashcompinit
+_liminal_completions() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    local commands="help list status activate deactivate create remove install uninstall search switch set"
+
+    case "$prev" in
+        activate|remove)
+            # complete with existing env names
+            local envs=$(ls "$HOME/.liminal/envs/" 2>/dev/null)
+            COMPREPLY=($(compgen -W "$envs" -- "$cur"))
+            ;;
+        switch|set|uninstall)
+            # complete with installed python versions
+            local versions=$(pyenv versions --bare 2>/dev/null)
+            COMPREPLY=($(compgen -W "$versions" -- "$cur"))
+            ;;
+        install|search)
+            # no completion — too many options to list
+            COMPREPLY=()
+            ;;
+        create)
+            COMPREPLY=()
+            ;;
+        *)
+            # complete top-level commands
+            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+            ;;
+    esac
+}
+
+complete -F _liminal_completions liminal
+
 liminal-help() {
   echo "\nUsage:\n liminal <command> [options]"
   echo "\nCommands: "
@@ -164,7 +199,7 @@ liminal-set() {
 }
 
 liminal-switch() {
-  pyenv local $1
+  pyenv shell $1
   return 0
 }
 
