@@ -222,7 +222,7 @@ liminal() {
   elif [ "$1" = "search" ]; then
     liminal-search $2
   elif [ "$1" = "set" ]; then
-    liminal-set $1
+    liminal-set $2
   elif [ "$1" = "switch" ]; then
     liminal-switch $2
   else
