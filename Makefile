@@ -22,8 +22,10 @@ install: precheck
 	fi
 	cp $(CURDIR)/liminal.sh $(LIMINAL_SCRIPT)
 	# add liminal.sh sourcing to .profile if not already present
-	@grep -qxF '. "$$HOME/.liminal/liminal.sh"' $(HOME)/.profile 2>/dev/null || \
+	@grep -qF '# Load liminal functions' $(HOME)/.profile 2>/dev/null || \
 		printf '\n# Load liminal functions\nif [ -f "$$HOME/.liminal/liminal.sh" ]; then\n    . "$$HOME/.liminal/liminal.sh"\nfi\n' >> $(HOME)/.profile
+
+reinstall: uninstall install
 
 uninstall:
 	# remove .liminal directory if it exists
