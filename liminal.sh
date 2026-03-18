@@ -31,8 +31,14 @@ _liminal_completions() {
 complete -F _liminal_completions liminal
 
 _liminal-help() {
-  echo "\nUsage:\n liminal <command> [options]"
-  echo "\nCommands: "
+
+	local reset='\033[0m'
+	local bold='\033[1m'
+	local muted='\033[2m'
+
+  printf "\n ${bold}liminal${reset}: a tool for things inbetween the things inbetween\n"
+  printf "\n${bold}Usage:${reset}\n ${muted}liminal <command> [options]${reset}\n"
+  printf "\n${bold}Env Commands: ${reset}\n"
   echo "  help          Show this help message and exit"
   echo "  list          List all existing virtual environments"
   echo "  activate      Activates an existing virtual environment"
@@ -59,9 +65,8 @@ _liminal-status() {
     local blue='\033[38;5;027m'
     local yellow='\033[38;5;178m'
 
-    printf "\n${bold}${teal}󰊠 Liminal Status${reset}\n\n"
-    printf "  ${blue}${bold} Python:      ${reset}${bold}%s${reset} ${muted}%s${reset}\n" "$pyver" "($pypath)"
-    printf "  ${yellow}${bold}󰌪 Environment: ${reset}${bold}%s${reset}\n" "$env"
+    printf "\n${blue}  ${bold}Python:      ${reset}${bold}%s${reset} ${muted}%s${reset}" "$pyver" "($pypath)"
+    printf "\n${yellow}  ${bold}Environment: ${reset}${bold}%s${reset}" "$env"
     printf "\n"
 }
 
