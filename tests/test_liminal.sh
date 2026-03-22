@@ -614,180 +614,52 @@ if describe "autocomplete"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 11. Makefile — profile file resolution logic
-#     These tests invoke the Makefile's _find-profile-file logic directly
-#     by running make with a sandboxed HOME and checking which file gets written.
+# 11. Makefile install — copies script and prints source instruction
 # ---------------------------------------------------------------------------
-if describe "Makefile profile file resolution"; then
+if describe "Makefile install"; then
 
     MAKEFILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+    h="$TEST_TMP/makefile_install"
+    mkdir -p "$h"
 
-    _run_install() {
-        # Run make install in a subshell with sandboxed HOME
-        # SHELL is passed explicitly to control which shell make thinks is active
-        local test_home="$1" shell_bin="$2"
-        SHELL="$shell_bin" HOME="$test_home" \
-            make -C "$MAKEFILE_DIR" install \
-            --no-print-directory 2>&1
-    }
-
-    # --- .profile always wins regardless of shell ---
-    h="$TEST_TMP/profile_priority"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile" "$h/.bash_profile" "$h/.zprofile" "$h/.bashrc"
-    _run_install "$h" "/bin/bash" >/dev/null 2>&1 || true
-    assert_contains ".profile wins over .bash_profile (bash)" \
-        "$(cat "$h/.profile")" "pyenv PATH (liminal)"
-    assert_not_contains ".bash_profile not written when .profile exists" \
-        "$(cat "$h/.bash_profile")" "pyenv PATH (liminal)"
-
-    h="$TEST_TMP/profile_priority_zsh"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile" "$h/.zprofile" "$h/.zshrc"
-    _run_install "$h" "/bin/zsh" >/dev/null 2>&1 || true
-    assert_contains ".profile wins over .zprofile (zsh)" \
-        "$(cat "$h/.profile")" "pyenv PATH (liminal)"
-    assert_not_contains ".zprofile not written when .profile exists" \
-        "$(cat "$h/.zprofile")" "pyenv PATH (liminal)"
-
-    # --- bash fallback to .bash_profile ---
-    h="$TEST_TMP/bash_fallback"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.bash_profile" "$h/.bashrc"
-    _run_install "$h" "/bin/bash" >/dev/null 2>&1 || true
-    assert_contains "bash uses .bash_profile when no .profile" \
-        "$(cat "$h/.bash_profile")" "pyenv PATH (liminal)"
-
-    # --- bash error when no profile file ---
-    h="$TEST_TMP/bash_no_profile"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.bashrc"
-    out=$(_run_install "$h" "/bin/bash" 2>&1) || true
-    assert_contains "bash errors helpfully when no profile file" \
-        "$out" "Error: No profile file found for bash"
-
-    # --- zsh fallback to .zprofile ---
-    h="$TEST_TMP/zsh_fallback"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.zprofile" "$h/.zshrc"
-    _run_install "$h" "/bin/zsh" >/dev/null 2>&1 || true
-    assert_contains "zsh uses .zprofile when no .profile" \
-        "$(cat "$h/.zprofile")" "pyenv PATH (liminal)"
-
-    # --- zsh error when no profile file ---
-    h="$TEST_TMP/zsh_no_profile"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.zshrc"
-    out=$(_run_install "$h" "/bin/zsh" 2>&1) || true
-    assert_contains "zsh errors helpfully when no profile file" \
-        "$out" "Error: No profile file found for zsh"
+    out=$(HOME="$h" make -C "$MAKEFILE_DIR" install --no-print-directory 2>&1) || true
+    assert_file_exists "install creates ~/.liminal dir"      "$h/.liminal"
+    assert_file_exists "install copies liminal.sh"           "$h/.liminal/liminal.sh"
+    assert_contains    "install prints source instruction"   "$out" ". \"\$HOME/.liminal/liminal.sh\""
 
 fi
 
 # ---------------------------------------------------------------------------
-# 12. Makefile — rc file resolution logic
+# 12. Makefile uninstall — removes ~/.liminal, warns about envs
 # ---------------------------------------------------------------------------
-if describe "Makefile rc file resolution"; then
+if describe "Makefile uninstall"; then
 
     MAKEFILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-    _run_install() {
-        local test_home="$1" shell_bin="$2"
-        SHELL="$shell_bin" HOME="$test_home" \
-            make -C "$MAKEFILE_DIR" install \
-            --no-print-directory 2>&1
-    }
-
-    # --- bash rc file ---
-    h="$TEST_TMP/bash_rc"
+    # No envs — should uninstall silently
+    h="$TEST_TMP/makefile_uninstall_empty"
     mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile" "$h/.bashrc"
-    _run_install "$h" "/bin/bash" >/dev/null 2>&1 || true
-    assert_contains "bash writes pyenv init to .bashrc" \
-        "$(cat "$h/.bashrc")" "pyenv init (liminal)"
-    assert_contains "bash writes liminal source to .bashrc" \
-        "$(cat "$h/.bashrc")" "Load liminal"
-
-    # --- bash error when no rc file ---
-    h="$TEST_TMP/bash_no_rc"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile"
-    out=$(_run_install "$h" "/bin/bash" 2>&1) || true
-    assert_contains "bash errors helpfully when no rc file" \
-        "$out" "Error: No rc file found for bash"
-
-    # --- zsh rc file ---
-    h="$TEST_TMP/zsh_rc"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile" "$h/.zshrc"
-    _run_install "$h" "/bin/zsh" >/dev/null 2>&1 || true
-    assert_contains "zsh writes pyenv init to .zshrc" \
-        "$(cat "$h/.zshrc")" "pyenv init (liminal)"
-    assert_contains "zsh writes liminal source to .zshrc" \
-        "$(cat "$h/.zshrc")" "Load liminal"
-
-    # --- zsh error when no rc file ---
-    h="$TEST_TMP/zsh_no_rc"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile"
-    out=$(_run_install "$h" "/bin/zsh" 2>&1) || true
-    assert_contains "zsh errors helpfully when no rc file" \
-        "$out" "Error: No rc file found for zsh"
-
-fi
-
-# ---------------------------------------------------------------------------
-# 13. Makefile — idempotent install (no duplicate blocks)
-# ---------------------------------------------------------------------------
-if describe "Makefile idempotent install"; then
-
-    MAKEFILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    h="$TEST_TMP/idempotent"
-    mkdir -p "$h/.liminal/envs"
-    touch "$h/.profile" "$h/.bashrc"
-
-    SHELL="/bin/bash" HOME="$h" make -C "$MAKEFILE_DIR" install --no-print-directory >/dev/null 2>&1 || true
-    SHELL="/bin/bash" HOME="$h" make -C "$MAKEFILE_DIR" install --no-print-directory >/dev/null 2>&1 || true
-
-    profile_count=$(grep -cx "# pyenv PATH (liminal)" "$h/.profile" 2>/dev/null || echo 0)
-    assert_eq "profile block not duplicated on re-install" "$profile_count" "1"
-
-    rc_count=$(grep -cx "# pyenv init (liminal)" "$h/.bashrc" 2>/dev/null || echo 0)
-    assert_eq "rc pyenv block not duplicated on re-install" "$rc_count" "1"
-
-    liminal_count=$(grep -cx "# Load liminal" "$h/.bashrc" 2>/dev/null || echo 0)
-    assert_eq "rc liminal source not duplicated on re-install" "$liminal_count" "1"
-
-fi
-
-# ---------------------------------------------------------------------------
-# 14. Makefile — uninstall cleans all candidate files
-# ---------------------------------------------------------------------------
-if describe "Makefile uninstall cleanup"; then
-
-    MAKEFILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    h="$TEST_TMP/uninstall_clean"
-    mkdir -p "$h/.liminal/envs"
-
-    # Manually seed all candidate files with liminal blocks (matching install format)
-    for f in .profile .bash_profile .zprofile .bashrc .zshrc; do
-        printf '\n# pyenv PATH (liminal)\nexport PYENV_ROOT="$HOME/.pyenv"\nexport PATH="$PYENV_ROOT/bin:$PATH"\nif command -v pyenv >/dev/null 2>&1; then\n    eval "$(pyenv init --path)"\nfi\n# end pyenv PATH (liminal)\n' >> "$h/$f"
-        printf '\n# pyenv init (liminal)\nif command -v pyenv >/dev/null 2>&1; then\n    eval "$(pyenv init -)"\nfi\n# end pyenv init (liminal)\n' >> "$h/$f"
-        printf '\n# Load liminal\nif [ -f "$HOME/.liminal/liminal.sh" ]; then\n    . "$HOME/.liminal/liminal.sh"\nfi\n# end Load liminal\n' >> "$h/$f"
-    done
-
     HOME="$h" make -C "$MAKEFILE_DIR" uninstall --no-print-directory >/dev/null 2>&1 || true
+    assert_file_not_exists "uninstall removes ~/.liminal when no envs" "$h/.liminal"
 
-    for f in .profile .bash_profile .zprofile .bashrc .zshrc; do
-        assert_not_contains "uninstall cleans pyenv PATH block from $f" \
-            "$(cat "$h/$f" 2>/dev/null)" "pyenv PATH (liminal)"
-        assert_not_contains "uninstall cleans pyenv init block from $f" \
-            "$(cat "$h/$f" 2>/dev/null)" "pyenv init (liminal)"
-        assert_not_contains "uninstall cleans liminal source block from $f" \
-            "$(cat "$h/$f" 2>/dev/null)" "Load liminal"
-    done
+    # With envs — prompt should abort on non-y input (echo n via stdin)
+    h="$TEST_TMP/makefile_uninstall_with_envs"
+    mkdir -p "$h/.liminal/envs/myenv"
+    out=$(echo "n" | HOME="$h" make -C "$MAKEFILE_DIR" uninstall --no-print-directory 2>&1) || true
+    assert_contains    "uninstall warns about existing envs" "$out" "permanently removed"
+    assert_file_exists "uninstall aborts when user says n"   "$h/.liminal"
 
-    assert_file_not_exists "uninstall removes ~/.liminal dir" "$h/.liminal"
+    # With envs — should proceed on y
+    h="$TEST_TMP/makefile_uninstall_confirm"
+    mkdir -p "$h/.liminal/envs/myenv"
+    echo "y" | HOME="$h" make -C "$MAKEFILE_DIR" uninstall --no-print-directory >/dev/null 2>&1 || true
+    assert_file_not_exists "uninstall removes ~/.liminal when user confirms" "$h/.liminal"
+
+    # Uninstall prints reminder to remove source line
+    h="$TEST_TMP/makefile_uninstall_reminder"
+    mkdir -p "$h/.liminal/envs"
+    out=$(HOME="$h" make -C "$MAKEFILE_DIR" uninstall --no-print-directory 2>&1) || true
+    assert_contains "uninstall reminds user to remove source line" "$out" "remove the liminal source line"
 
 fi
 
